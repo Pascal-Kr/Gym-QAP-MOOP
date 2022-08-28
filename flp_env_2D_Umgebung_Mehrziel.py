@@ -19,30 +19,19 @@ class qapEnv(gym.Env):
     metadata = {'render.modes': ['rgb_array', 'human']}  
 
     def __init__(self, mode=None, instance=None):
-        __location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
-        self.DistanceMatrices, self.FlowMatrices = pickle.load(open(os.path.join(__location__,'discrete', 'qap_matrices.pkl'), 'rb'))
         self.transport_intensity = None
         self.instance = instance
         self.mode = mode
         
-        
-        while not (self.instance in self.DistanceMatrices.keys() or self.instance in self.FlowMatrices.keys() or self.instance in ['Neos-n6', 'Neos-n7', 'Brewery']):
-            print('Available Problem Sets:', self.DistanceMatrices.keys())
-            self.instance = input('Pick a problem:').strip()
-     
-        self.D = self.DistanceMatrices[self.instance]
-        self.F = self.FlowMatrices[self.instance]
-        self.n = len(self.D[0])
-        self.x = math.ceil((math.sqrt(self.n)))
-        
-        
         Distanzen = gym_flp.envs.Hilfsfunktionen.Flusskennzahlen()
         Fluss = gym_flp.envs.Hilfsfunktionen.Flusskennzahlen()
         self.F = Fluss.Flussmatrix()
+        self.n = len(self.F[0])
+        self.x = math.ceil((math.sqrt(self.n)))
         self.Lärmdummy = gym_flp.envs.Hilfsfunktionen.Flusskennzahlen()
         self.Lärm1 = self.Lärmdummy.Lärmmatrix()
-        self.Fabriklänge = 60  #24   #48
-        self.Fabrikbreite = 60  #24   #48
+        self.Fabriklänge = 60
+        self.Fabrikbreite = 60
         self.Messpunkte = 15
         Maschinenmittelpunkte = gym_flp.envs.Hilfsfunktionen.Flusskennzahlen()
         self.Mittelpunktex, self.Mittelpunktey = Maschinenmittelpunkte.Maschinenmittelpunkte(self.Fabriklänge, self.Fabrikbreite, self.x)
@@ -57,14 +46,7 @@ class qapEnv(gym.Env):
         self.max_steps = self.n - 1
 
         self.action_space = spaces.Discrete(int((self.n**2-self.n)*0.5)+1)
-                
-        # If you are using images as input, the input values must be in [0, 255] as the observation is normalized (dividing by 255 to have values in [0, 1]) when using CNN policies.       
-        if self.mode == "rgb_array":
-            self.observation_space = spaces.Box(low = 0, high = 255, shape=(1, self.n, 3), dtype = np.uint8) # Image representation
-        elif self.mode == 'human':
-            self.observation_space = spaces.Box(low=1, high = self.n, shape=(self.n,), dtype=np.float32)
-        
-        self.states = {}    # Create an empty dictonary where states and their respective reward will be stored for future reference
+        self.observation_space = spaces.Box(low = 0, high = 255, shape=(1, self.n, 3), dtype = np.uint8) # Image representation
         self.actions = self.pairwiseExchange(self.n)
         
         # Initialize Environment with empty state and action
@@ -73,20 +55,16 @@ class qapEnv(gym.Env):
         self.internal_state = None
         
         #Initialize moving target to incredibly high value. To be updated if reward obtained is smaller. 
-        
         self.movingTargetRewardMHC = np.inf 
         self.movingTargetRewardRückläufe = np.inf 
-        self.movingTargetRewardDiagonalabweichung = np.inf 
-        self.movingTargetRewardLärm = np.inf
+        self.movingTargetRewardLärmpunktzahl = np.inf
         self.Actual_MHCmin = np.inf
         self.Actual_Rücklaufmin = np.inf
-        self.Actual_Diagonalmin = np.inf
         self.Actual_Lärmmin = np.inf
  
     
-        self.MHC = gym_flp.envs.Hilfsfunktionen.Flusskennzahlen()    # Create an instance of class MHC in module mhc.py from package rewards
+        self.MHC = gym_flp.envs.Hilfsfunktionen.Flusskennzahlen()
         self.Rückläufe = gym_flp.envs.Hilfsfunktionen.Flusskennzahlen()
-        self.Gesamtdiagonalabweichung = gym_flp.envs.Hilfsfunktionen.Flusskennzahlen()
         self.Reward = gym_flp.envs.Hilfsfunktionen.Flusskennzahlen() 
     
     def reset(self):
@@ -98,17 +76,11 @@ class qapEnv(gym.Env):
         newState = self.fromState.copy()
         MHC, self.TM = self.MHC.computeMHC(self.D, self.F, newState)
         Rückläufe, self.Flussmatrixneu = self.Rückläufe.computeRückläufe(self.F, newState)
-        Gesamtdiagonalabweichung, self.Flussmatrixneu = self.Gesamtdiagonalabweichung.computeDiagonalabweichung(self.F, newState)
         self.Lärmpositionen = self.Lärmdummy.computeLärm(self.Lärm1, newState)
         LärmMesspunkte, Lärmdurchschnitt = self.Lärmdummy.Lärmberechnung(self.Fabriklänge, self.Fabrikbreite, self.Mittelpunktex, self.Mittelpunktey, self.Lärmpositionen, self.n, self.Messpunkte)
-
-        self.Unter55, self.Unter60, self.Unter65, self.Unter70, self.Unter75, self.Unter80, self.Unter85, self.Über85 = self.Lärmdummy.Lärmintervalle(LärmMesspunkte)
-        self.Lärmpunktzahl = self.Lärmdummy.LärmIntervallpunkte(self.Unter55, self.Unter60, self.Unter65, self.Unter70, self.Unter75, self.Unter80, self.Unter85, self.Über85)
-        self.Lärmbereichswerte, self.Lärmmin, self.Lärmmax = self.Lärmdummy.Lärmbereiche(LärmMesspunkte, self.n, self.Messpunkte)
         self.Lärmbereichswerte2, self.Lärmmin2, self.Lärmmax2 = self.Lärmdummy.Lärmbereiche2(LärmMesspunkte, self.n)
         self.Unter55, self.Unter60, self.Unter65, self.Unter70, self.Unter75, self.Unter80, self.Unter85, self.Über85  = self.Lärmdummy.Lärmintervalle(self.Lärmbereichswerte2)
-        self.Lärmpunktzahl = self.Lärmdummy.LärmIntervallpunkte(self.Unter55, self.Unter60, self.Unter65, self.Unter70, self.Unter75, self.Unter80, self.Unter85, self.Über85)
-        self.xyz = newState  #Permutationsmatrix anzeigen (optional)
+        Lärmpunktzahl = self.Lärmdummy.LärmIntervallpunkte(self.Unter55, self.Unter60, self.Unter65, self.Unter70, self.Unter75, self.Unter80, self.Unter85, self.Über85)
         
         state_2D = np.array(self.get_image())
         
@@ -122,23 +94,11 @@ class qapEnv(gym.Env):
         self.transformedRückläufe = ((Rückläufe-self.Rücklaufmin)/(self.Rücklaufmax-self.Rücklaufmin))
         self.last_transformedRückläufe = self.transformedRückläufe
         
-        
-        self.initial_Gesamtdiagonalabweichung = Gesamtdiagonalabweichung
-        self.last_Gesamtdiagonalabweichung = self.initial_Gesamtdiagonalabweichung
-        self.transformedDiagonalabweichung = ((Gesamtdiagonalabweichung-self.Diagonalmin)/(self.Diagonalmax-self.Diagonalmin))
-        self.last_transformedDiagonalabweichung = self.transformedDiagonalabweichung
-        
         self.initial_LärmMesspunkte = LärmMesspunkte
-        self.last_LärmMesspunkte = self.initial_LärmMesspunkte
-        
-        self.initial_Lärmdurchschnitt = Lärmdurchschnitt
-        self.last_Lärmdurchschnitt = self.initial_Lärmdurchschnitt
-        self.transformedLärmdurchschnitt = ((Lärmdurchschnitt-self.Lärmutopia)/(self.Lärmnadir-self.Lärmutopia))
-        self.last_transformedLärmdurchschnitt = self.transformedLärmdurchschnitt  
-        
-        self.initial_Lärmpunktzahl = self.Lärmpunktzahl
+        self.last_LärmMesspunkte = self.initial_LärmMesspunkte 
+        self.initial_Lärmpunktzahl = Lärmpunktzahl
         self.last_Lärmpunktzahl = self.initial_Lärmpunktzahl
-        self.transformedLärmpunktzahl = ((self.Lärmpunktzahl-self.Lärmpunktzahlmin)/(self.Lärmpunktzahlmax-self.Lärmpunktzahlmin))
+        self.transformedLärmpunktzahl = ((Lärmpunktzahl-self.Lärmpunktzahlmin)/(self.Lärmpunktzahlmax-self.Lärmpunktzahlmin))
         self.last_transformedLärmpunktzahl = self.transformedLärmpunktzahl  
         return state_2D
     
@@ -154,59 +114,54 @@ class qapEnv(gym.Env):
         newState = self.fromState.copy()
         MHC, self.TM = self.MHC.computeMHC(self.D, self.F, newState)
         Rückläufe, self.Flussmatrixneu = self.Rückläufe.computeRückläufe(self.F, newState)
-        Gesamtdiagonalabweichung, self.Flussmatrixneu = self.Gesamtdiagonalabweichung.computeDiagonalabweichung(self.F, newState)
         self.Lärmpositionen = self.Lärmdummy.computeLärm(self.Lärm1, newState)
         LärmMesspunkte, Lärmdurchschnitt = self.Lärmdummy.Lärmberechnung(self.Fabriklänge, self.Fabrikbreite, self.Mittelpunktex, self.Mittelpunktey, self.Lärmpositionen, self.n, self.Messpunkte)        
-        self.Unter55, self.Unter60, self.Unter65, self.Unter70, self.Unter75, self.Unter80, self.Unter85, self.Über85  = self.Lärmdummy.Lärmintervalle(LärmMesspunkte)
-        self.Lärmpunktzahl = self.Lärmdummy.LärmIntervallpunkte(self.Unter55, self.Unter60, self.Unter65, self.Unter70, self.Unter75, self.Unter80, self.Unter85, self.Über85)
-        self.Lärmbereichswerte, self.Lärmmin, self.Lärmmax = self.Lärmdummy.Lärmbereiche(LärmMesspunkte, self.n, self.Messpunkte)
         self.Lärmbereichswerte2, self.Lärmmin2, self.Lärmmax2 = self.Lärmdummy.Lärmbereiche2(LärmMesspunkte, self.n)
         self.Unter55, self.Unter60, self.Unter65, self.Unter70, self.Unter75, self.Unter80, self.Unter85, self.Über85  = self.Lärmdummy.Lärmintervalle(self.Lärmbereichswerte2)
-        self.Lärmpunktzahl = self.Lärmdummy.LärmIntervallpunkte(self.Unter55, self.Unter60, self.Unter65, self.Unter70, self.Unter75, self.Unter80, self.Unter85, self.Über85)
+        Lärmpunktzahl = self.Lärmdummy.LärmIntervallpunkte(self.Unter55, self.Unter60, self.Unter65, self.Unter70, self.Unter75, self.Unter80, self.Unter85, self.Über85)
         
-                
-        self.last_MHC = MHC
+        if self.movingTargetRewardMHC == np.inf:
+            self.movingTargetRewardMHC = MHC                    
         self.transformedMHC = ((MHC-self.MHCmin)/(self.MHCmax-self.MHCmin))
-
         self.MHCreward= (self.last_transformedMHC - self.transformedMHC)*100
-        self.last_transformedMHC = self.transformedMHC    
-        
+        self.last_transformedMHC = self.transformedMHC   
+        if MHC <= self.movingTargetRewardMHC:
+            self.MHCreward +=10
+            self.movingTargetRewardMHC = MHC       
 
-        
-        self.last_Rückläufe = Rückläufe
+
+        if self.movingTargetRewardRückläufe == np.inf:
+            self.movingTargetRewardRückläufe = Rückläufe            
+        #self.last_Rückläufe = Rückläufe
         self.transformedRückläufe = ((Rückläufe-self.Rücklaufmin)/(self.Rücklaufmax-self.Rücklaufmin))
-        
         self.Rücklaufreward= (self.last_transformedRückläufe - self.transformedRückläufe)*100
-        self.last_transformedRückläufe = self.transformedRückläufe
-
+        #self.Rücklaufreward= (self.last_Rückläufe-Rückläufe)
+        self.last_transformedRückläufe = self.transformedRückläufe          
+        self.last_Rückläufe = Rückläufe
+        if Rückläufe <= self.movingTargetRewardRückläufe:
+            self.Rücklaufreward +=10
+            self.movingTargetRewardRückläufe = Rückläufe
+     
         
-        self.last_Gesamtdiagonalabweichung = Gesamtdiagonalabweichung
-        self.transformedDiagonalabweichung = ((Gesamtdiagonalabweichung-self.Diagonalmin)/(self.Diagonalmax-self.Diagonalmin))
-    
-        self.Gesamtdiagonalabweichungreward= (self.last_transformedDiagonalabweichung - self.transformedDiagonalabweichung)*100
-        self.last_transformedDiagonalabweichung = self.transformedDiagonalabweichung
-        
-            
-        self.last_Lärmdurchschnitt = Lärmdurchschnitt        
-        self.transformedLärmdurchschnitt = ((Lärmdurchschnitt-self.Lärmmin)/(self.Lärmmax-self.Lärmmin))
-
-        self.Lärmreward= (self.last_transformedLärmdurchschnitt - self.transformedLärmdurchschnitt)*100
-        self.last_transformedLärmdurchschnitt = self.transformedLärmdurchschnitt  
-                  
-        self.last_Lärmpunktzahl = self.Lärmpunktzahl        
-        self.transformedLärmpunktzahl = ((self.Lärmpunktzahl-self.Lärmpunktzahlmin)/(self.Lärmpunktzahlmax-self.Lärmpunktzahlmin))        
+        if self.movingTargetRewardLärmpunktzahl == np.inf:
+            self.movingTargetRewardLärmpunktzahl = Lärmpunktzahl            
+        #self.last_Lärmpunktzahl = Lärmpunktzahl        
+        self.transformedLärmpunktzahl = ((Lärmpunktzahl-self.Lärmpunktzahlmin)/(self.Lärmpunktzahlmax-self.Lärmpunktzahlmin))        
         self.Lärmrewardintervalle= (self.last_transformedLärmpunktzahl - self.transformedLärmpunktzahl)*100
+        #self.Lärmrewardintervalle= self.last_Lärmpunktzahl-Lärmpunktzahl
         self.last_transformedLärmpunktzahl = self.transformedLärmpunktzahl
         
+        if Lärmpunktzahl<=self.movingTargetRewardLärmpunktzahl:
+            self.Lärmrewardintervalle +=10
+            self.movingTargetRewardLärmpunktzahl = Lärmpunktzahl
+        elif (Lärmpunktzahl-self.last_Lärmpunktzahl)>0:
+            self.Lärmrewardintervalle-=5
+        self.last_Lärmpunktzahl = Lärmpunktzahl
         
         reward = self.Reward.computeGesamtreward(self.MHCreward, self.Rücklaufreward, self.Lärmrewardintervalle)
         
-        
-        self.Actual_Minimum = self.movingTargetRewardMHC
-            
         newState = np.array(self.get_image())
         self.state = newState.copy()
-            
         self.internal_state = self.fromState.copy()
         
         if self.step_counter==self.max_steps:
@@ -214,8 +169,7 @@ class qapEnv(gym.Env):
         else:
             done = False
         
-        return newState, reward, done, {}
-        #return newState, reward, done
+        return newState, reward, done, {'MHC': MHC, 'Rückläufe': Rückläufe,'Lärm': Lärmpunktzahl}
     
     def render(self, mode=None):
         if self.mode == 'rgb_array':
@@ -269,8 +223,6 @@ class qapEnv(gym.Env):
         self.MHCmax = 0
         self.Rücklaufmin = np.inf
         self.Rücklaufmax = 0
-        self.Diagonalmin = np.inf
-        self.Diagonalmax = 0
         self.Lärmutopia = np.inf
         self.Lärmnadir = 0
         self.Lärmpunktzahlmin = np.inf
@@ -291,11 +243,6 @@ class qapEnv(gym.Env):
             if Rückläufe >= self.Rücklaufmax:
                 self.Rücklaufmax = Rückläufe
             
-            Gesamtdiagonalabweichung, self.Flussmatrixneu = self.Gesamtdiagonalabweichung.computeDiagonalabweichung(self.F, Probestate)
-            if Gesamtdiagonalabweichung <= self.Diagonalmin:
-                self.Diagonalmin = Gesamtdiagonalabweichung
-            if Gesamtdiagonalabweichung >= self.Diagonalmax:
-                self.Diagonalmax = Gesamtdiagonalabweichung
             
             self.Lärmpositionen = self.Lärmdummy.computeLärm(self.Lärm1, Probestate)
             LärmMesspunkte, Lärmdurchschnitt = self.Lärmdummy.Lärmberechnung(self.Fabriklänge, self.Fabrikbreite, self.Mittelpunktex, self.Mittelpunktey, self.Lärmpositionen, self.n, self.Messpunkte)
@@ -314,4 +261,4 @@ class qapEnv(gym.Env):
             if Lärmpunktzahl >= self.Lärmpunktzahlmax:
                 self.Lärmpunktzahlmax = Lärmpunktzahl
                 
-        return self.MHCmin, self.MHCmax, self.Rücklaufmin, self.Rücklaufmax, self.Diagonalmin, self.Diagonalmax, self.Lärmutopia, self.Lärmnadir, self.Lärmpunktzahlmin, self.Lärmpunktzahlmax
+        return self.MHCmin, self.MHCmax, self.Rücklaufmin, self.Rücklaufmax, self.Lärmutopia, self.Lärmnadir, self.Lärmpunktzahlmin, self.Lärmpunktzahlmax

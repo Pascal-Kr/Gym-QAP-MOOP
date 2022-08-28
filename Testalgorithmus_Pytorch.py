@@ -6,20 +6,26 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from datetime import datetime
 
-use_cuda = T.cuda.is_available()
+
 current_time = datetime.now().strftime('%b%d_%H-%M')
 writer = SummaryWriter(log_dir=os.path.join('logs_pytorch_Test', current_time + '_Rücklauf100_1k'))
 
 
 if __name__ == '__main__':
     env=qapEnv(mode ='rgb_array', instance='Neos-n7')
-    ename='Rücklauf100_20k'
+    ename='Lärm100_100k'
     Aggregate_Stats_Every=50
-    Probeläufe = 2000
+    Probeläufe = 200
     MHCmin, MHCmax, Rücklaufmin, Rücklaufmax, Lärmmin, Lärmmax, Lärmpunktzahlmin, Lärmpunktzahlmax = env.Probelauf(Probeläufe)
     average_reward=0
     load_checkpoint = True
-    episodes=1000
+    write_Logfile = False
+    Show_Actions = False
+    Build_Average = False
+    Aggregate_Stats_Every = 10
+    episodes=10
+    if write_Logfile == True:
+        episodes = 1000
     
     # For stats
     ep_rewards = []
@@ -31,8 +37,8 @@ if __name__ == '__main__':
 
     agent = DQNAgent(episodes, gamma=0.8, epsilon=1, lr=0.0001,
                      input_dims=(env.observation_space_values),
-                     n_actions=env.action_space.n, mem_size=5000, eps_min=0,
-                     batch_size=64, replace=1000,
+                     n_actions=env.action_space.n, Replay_Memory_Size=5000, eps_min=0,
+                     batch_size=64, Update_Target_Every=1000,
                      chkpt_dir='models/', algo='DQNAgent',
                      env_name=ename)
     
@@ -41,45 +47,50 @@ if __name__ == '__main__':
         agent.load_models()
         agent.epsilon=0
 
-    n_steps = 0
-    steps_array = []
 
     for episode in range(1, episodes + 1):
         done = False
         current_state = env.reset()
-        #print('Anfangs-Lärmpunktzahl: ' + str(env.initial_Lärmpunktzahl))
-        #print('Anfangs-MHC: ' + str(env.initial_MHC))
-        #print('Anfangs-Rückläufe: ' + str(env.initial_Rückläufe))
+        if Show_Actions == True:
+            env.render()
+        if write_Logfile == False:
+            print('Anfangs-Lärmpunktzahl: ' + str(env.initial_Lärmpunktzahl))
+            print('Anfangs-MHC: ' + str(int(env.initial_MHC)))
+            print('Anfangs-Rückläufe: ' + str(env.initial_Rückläufe))
         episode_reward = 0
         while not done:
             action = agent.choose_action(current_state)
             new_state, reward, done, info = env.step(action)
             episode_reward += reward
-            #print('Lärmpunktzahl: ' + str(info['Lärm']))
-            #print('MHC: ' + str(info['MHC']))
-            #print('Rückläufe: ' + str(info['Rückläufe']))
-            #print('MHC Reward: ' + str(env.MHCreward))
-            #print('Rücklaufreward: ' + str(env.Rücklaufreward))
-            #print('Lärm Reward: ' + str(env.Lärmreward))
-            #print('Lärm Reward Intervalle: ' + str(env.Lärmrewardintervalle))
-            #print('Reward für Aktion: ' + str(reward))
-            #print('Episoden Reward: ' + str(episode_reward))
+            if Show_Actions == True:
+                env.render()
+            if write_Logfile == False:
+                print('Lärmpunktzahl: ' + str(info['Lärm']))
+                print('MHC: ' + str(int(info['MHC'])))
+                print('Rückläufe: ' + str(info['Rückläufe']))
+                print('MHC Reward: ' + str(env.MHCreward))
+                print('Rücklaufreward: ' + str(env.Rücklaufreward))
+                print('Lärm Reward: ' + str(env.Lärmreward))
+                print('Lärm Reward Intervalle: ' + str(env.Lärmrewardintervalle))
+                print('Reward für Aktion: ' + str(reward))
+                print('Episoden Reward: ' + str(episode_reward))
+                print('')
 
             current_state = new_state
-            n_steps += 1
-        #print('')
-        steps_array.append(n_steps)
         
         ep_rewards.append(episode_reward)
         #ep_Minimums.append(env.Actual_MHCmin)
         ep_last_Costs.append(info['MHC'])
         ep_last_Rückläufe.append(info['Rückläufe'])
         ep_last_Lärmpunktzahl.append(info['Lärm'])
-        writer.add_scalar('Episode Reward', episode_reward, episode)
-        writer.add_scalar('Last MHC', info['MHC'], episode)
-        writer.add_scalar('Last Rückläufe', info['Rückläufe'],episode)
-        writer.add_scalar('Last Lärmpunktzahl', info['Lärm'],episode)
-            
+        if write_Logfile == True:
+            writer.add_scalar('Episode Reward', episode_reward, episode)
+            writer.add_scalar('Last MHC', info['MHC'], episode)
+            writer.add_scalar('Last Rückläufe', info['Rückläufe'],episode)
+            writer.add_scalar('Last Lärmpunktzahl', info['Lärm'],episode)
+        if not episode % Aggregate_Stats_Every and Build_Average == True:
+            average_reward = sum(ep_rewards[-Aggregate_Stats_Every:])/len(ep_rewards[-Aggregate_Stats_Every:])
+            writer.add_scalar('Average Reward', average_reward, episode)
             
 Minimum_MHC = min(ep_last_Costs)          
 Maximum_MHC = max(ep_last_Costs)
