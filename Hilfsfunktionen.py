@@ -83,9 +83,9 @@ class Flusskennzahlen():
     
 
     def computeGesamtreward(self, Wert1, Wert2, Wert3):  #Gewichtungen beliebig anpassbar
-        Gewichtung1 = 1  #MHC 0.5
-        Gewichtung2 = 0   #Rückläufe 0.25
-        Gewichtung3 = 0   #Lärm
+        Gewichtung1 = 0  #MHC 0.4
+        Gewichtung2 = 1   #Rückläufe 0.2
+        Gewichtung3 = 0   #Lärm 0.4
         #Gewichtung4= 0   #Diagonalabweichung
         Reward = Gewichtung1 * Wert1 + Gewichtung2 * Wert2 + Gewichtung3 * Wert3
         return Reward
@@ -104,7 +104,7 @@ class Flusskennzahlen():
         F[0][5]=11
         F[0][6]=20
         F[0][7]=22
-        F[0][8]=19
+        F[0][8]=19   #1
 
         F[1][0]=1
         F[1][1]=0
@@ -114,7 +114,7 @@ class Flusskennzahlen():
         F[1][5]=2
         F[1][6]=1       
         F[1][7]=1
-        F[1][8]=104
+        F[1][8]=104   #10
         
         
         F[2][0]=2
@@ -125,7 +125,7 @@ class Flusskennzahlen():
         F[2][5]=17
         F[2][6]=100
         F[2][7]=1
-        F[2][8]=31
+        F[2][8]=31   #31
 
         
         F[3][0]=5
@@ -147,7 +147,7 @@ class Flusskennzahlen():
         F[4][5]=1
         F[4][6]=10
         F[4][7]=1
-        F[4][8]=79
+        F[4][8]=79  #7
         
         F[5][0]=9
         F[5][1]=14
@@ -179,10 +179,10 @@ class Flusskennzahlen():
         F[7][7]=0
         F[7][8]=12
         
-        F[8][0]=8
+        F[8][0]=8    
         F[8][1]=11
-        F[8][2]=25
-        F[8][3]=29
+        F[8][2]=25 #2
+        F[8][3]=29   #3
         F[8][4]=9
         F[8][5]=7
         F[8][6]=2
